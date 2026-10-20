@@ -1,0 +1,16 @@
+services:
+  api:
+    command: ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    volumes:
+      - ./src:/app/src:ro
+  consumer:
+    volumes:
+      - ./src:/app/src:ro
+  migrations:
+    volumes:
+      - ./src:/app/src:ro
+      - ./migrations:/app/migrations:ro
+  test:
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro

@@ -1,0 +1,82 @@
+x-app: &app
+  build:
+    context: .
+    target: runtime
+  env_file:
+    - .env
+  environment:
+    DB_HOST: db
+    DB_PORT: "5432"
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_PORT: "5672"
+
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${DB_NAME:-payments}
+      POSTGRES_USER: ${DB_USER:-payments}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-payments}
+    ports:
+      - "127.0.0.1:${DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  rabbitmq:
+    image: rabbitmq:4-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-payments}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-payments}
+      RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST:-/}
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  migrations:
+    <<: *app
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    <<: *app
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  consumer:
+    <<: *app
+    command: ["faststream", "run", "src.consumer:app"]
+    restart: unless-stopped
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
+  webhook-receiver:
+    <<: *app
+    command: ["uvicorn", "examples.webhook_receiver:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "127.0.0.1:8001:8001"
+    profiles: ["webhook"]
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
