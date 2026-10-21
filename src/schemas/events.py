@@ -14,7 +14,7 @@ class PaymentEvent(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     event_id: UUID
-    payment_id: int = Field(strict=True, gt=0)
+    payment_id: int = Field(strict=True, gt=0, le=2147483647)
 
 
 class PaymentWebhook(BaseModel):
